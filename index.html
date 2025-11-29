@@ -436,7 +436,6 @@
                         },
                     },
                     children: [
-                        // Page 1
                         createText("DRONE SURVEY LOG SHEET", true, 32, true, AlignmentType.CENTER, true), // Heading 1
                         createText(""), // Spacer
                         new Paragraph({
@@ -456,14 +455,13 @@
                                 ...generalCheckRows
                             ],
                         }),
-                        // Page Break
                         new Paragraph({
                             text: "",
-                            pageBreakBefore: true, 
+                            pageBreakBefore: true, // FORCE PAGE BREAK
                         }),
-                        // Page 2
                         new Paragraph({
-                            children: [new TextRun({ text: "2. FLIGHT LOG SHEET", bold: true, font: FONT_NAME, size: 24, allCaps: true, underline: { type: "single" } })],
+                            text: "2. Flight Log sheet",
+                            heading: HeadingLevel.HEADING_2,
                             spacing: { after: 200 }
                         }),
                         new Table({
@@ -522,7 +520,7 @@
                 const loader = document.getElementById('loading');
                 if(loader) { loader.style.opacity = '0'; setTimeout(() => loader.style.display = 'none', 500); }
                 
-                const saved = localStorage.getItem('360survey_pro_v21');
+                const saved = localStorage.getItem('360survey_pro_v23');
                 if (saved) {
                     const data = JSON.parse(saved);
                     if (data.waypoints) setWaypoints(data.waypoints);
@@ -532,12 +530,13 @@
                 }
             }, []);
 
-            useEffect(() => { localStorage.setItem('360survey_pro_v21', JSON.stringify({ waypoints, project, kmlFileName, signatureImg })); }, [waypoints, project, kmlFileName, signatureImg]);
+            useEffect(() => { localStorage.setItem('360survey_pro_v23', JSON.stringify({ waypoints, project, kmlFileName, signatureImg })); }, [waypoints, project, kmlFileName, signatureImg]);
 
             useEffect(() => {
                 if (!mapRef.current || mapInstance.current) return;
                 try {
-                    const map = L.map(mapRef.current, { zoomControl: false }).setView([24.64, 72.58], 15);
+                    // Update: Changed initial view to India
+                    const map = L.map(mapRef.current, { zoomControl: false }).setView([20.5937, 78.9629], 5);
                     mapInstance.current = map;
                     L.control.zoom({ position: 'bottomright' }).addTo(map);
                     const layers = {
@@ -589,7 +588,6 @@
                 if (showStaticLayer && staticKmlFeatures.length > 0) {
                     staticKmlFeatures.forEach(feature => {
                         let layer;
-                        // Bright yellow KML path styling for visibility
                         const polyStyle = { color: '#FFFF00', weight: 3, opacity: 0.9, fillColor: '#FFFF00', fillOpacity: 0.1, dashArray: '6, 4', className: feature.type === 'polygon' ? 'static-layer-polygon' : 'static-layer-path' };
                         if (feature.type === 'polygon') layer = L.polygon(feature.coords.map(c => [c.lat, c.lon]), polyStyle);
                         else if (feature.type === 'polyline') layer = L.polyline(feature.coords.map(c => [c.lat, c.lon]), polyStyle);
@@ -687,8 +685,6 @@
 
             // Simple HTML Preview for UI (Docx logic handled separately)
             const showPrintPreview = () => {
-                // This is a simplified HTML view just for on-screen checking
-                // The actual file generation is handled by exportDocx
                 window.print();
             };
 
