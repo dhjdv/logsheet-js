@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360°SURVEY Pro | Liquid Glass Edition</title>
+    <title>360°SURVEY LOGSHEET</title>
     
     <!-- Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -18,6 +18,8 @@
     <!-- Docx.js for Native Word Generation -->
     <script src="https://unpkg.com/docx@7.1.0/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- JSZip for ZIP creation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -42,9 +44,35 @@
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
         }
         
+        /* Input Field Styling Fix */
+        input[type="text"], input[type="number"], input[type="date"], select {
+            color: #111827 !important; /* Force black text in light mode */
+            background-color: rgba(255,255,255,0.7);
+        }
+        .dark input[type="text"], .dark input[type="number"], .dark input[type="date"], .dark select {
+            color: #f3f4f6 !important; /* Force white text in dark mode */
+            background-color: rgba(0,0,0,0.3);
+        }
+        
+        /* Custom Select styling to match glassy look */
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+        }
+        
         /* Smooth Transitions */
         .transition-all-smooth {
             transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        
+        /* Expandable section transition */
+        .expandable-content {
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            overflow: hidden;
         }
 
         /* Marker Styling - Numbered Dots */
@@ -104,6 +132,38 @@
             transform: scale(1.02);
         }
         
+        /* Scrollable Time Picker Styles */
+        .time-picker-column {
+            height: 80px;
+            overflow-y: scroll;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none;  /* IE 10+ */
+            scroll-snap-type: y mandatory;
+        }
+        .time-picker-column::-webkit-scrollbar { 
+            display: none; /* Chrome/Safari */
+        }
+        .time-picker-item {
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #6b7280;
+            scroll-snap-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .time-picker-item.selected {
+            color: #2563eb;
+            font-size: 1rem;
+            font-weight: 800;
+        }
+        .dark .time-picker-item.selected {
+            color: #60a5fa;
+        }
+
         /* Print Styles - EXACT 0.5 Inch Margins & Centering */
         @media print {
             @page { 
@@ -123,8 +183,8 @@
             /* Global Center Alignment for Print */
             body, h1, h2, div, table { text-align: center; }
             
-            h1 { font-size: 16pt; font-weight: bold; text-decoration: underline; margin-bottom: 10px; font-family: 'Tahoma', sans-serif !important; }
-            .section-title { text-align: left; font-weight: bold; text-decoration: underline; margin-top: 10px; margin-bottom: 5px; font-family: 'Tahoma', sans-serif !important; text-transform: uppercase; }
+            h1 { font-size: 16pt; font-weight: bold; text-decoration: underline; margin-bottom: 10px; font-family: 'Tahoma', sans-serif !important; color: black; }
+            .section-title { text-align: left; font-weight: bold; text-decoration: underline; margin-top: 10px; margin-bottom: 5px; font-family: 'Tahoma', sans-serif !important; text-transform: uppercase; color: black; }
             
             table { 
                 width: 100%; 
@@ -193,6 +253,33 @@
             const minStr = min.toString().padStart(2, '0');
             const degStr = deg.toString().padStart(2, '0');
             return `${degStr}°${minStr}'${secStr}"${direction}`;
+        };
+        
+        // Helper to format Date as DD/MM/YYYY
+        const formatDateDDMMYYYY = (dateString) => {
+            if (!dateString) return "";
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return dateString; 
+            
+            const day = date.getDate().toString().padStart(2, '0');
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const year = date.getFullYear();
+            
+            return `${day}/${month}/${year}`;
+        };
+
+        // Convert 12hr Time Object to 24hr String (HH:mm)
+        const convert12to24 = (timeObj) => {
+            let hours = parseInt(timeObj.hour);
+            const minutes = parseInt(timeObj.minute);
+            const ampm = timeObj.ampm;
+
+            if (ampm === 'PM' && hours < 12) hours += 12;
+            if (ampm === 'AM' && hours === 12) hours = 0;
+
+            const hStr = hours.toString().padStart(2, '0');
+            const mStr = minutes.toString().padStart(2, '0');
+            return `${hStr}:${mStr}`;
         };
 
         const calculateDistance = (p1, p2) => {
@@ -277,13 +364,81 @@
             </div>
         );
 
+        // MODERN SCROLLABLE TIME PICKER
+        const TimePickerScroll = ({ value, onChange, label }) => {
+            const hours = Array.from({length: 12}, (_, i) => (i + 1).toString().padStart(2, '0'));
+            const minutes = Array.from({length: 60}, (_, i) => i.toString().padStart(2, '0'));
+            const ampms = ["AM", "PM"];
+
+            return (
+                <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <span className="text-[10px] uppercase font-bold text-gray-500 pl-1">{label}</span>
+                    <div className="flex gap-1 bg-white/60 dark:bg-black/20 rounded-xl p-1 border border-transparent focus-within:border-blue-500 transition-all h-24 overflow-hidden relative group hover:bg-white/80">
+                         {/* Hours Column */}
+                        <div className="flex-1 time-picker-column relative">
+                            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-6 bg-blue-100/50 dark:bg-blue-900/30 rounded pointer-events-none z-0"></div>
+                            <div className="py-[28px] relative z-10"> 
+                                {hours.map((h) => (
+                                    <div 
+                                        key={h} 
+                                        className={`time-picker-item ${value.hour === h ? 'selected' : ''}`}
+                                        onClick={() => onChange({...value, hour: h})}
+                                    >
+                                        {h}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                         {/* Separator */}
+                        <div className="flex items-center justify-center font-bold text-gray-400">:</div>
+
+                         {/* Minutes Column */}
+                        <div className="flex-1 time-picker-column relative">
+                            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-6 bg-blue-100/50 dark:bg-blue-900/30 rounded pointer-events-none z-0"></div>
+                            <div className="py-[28px] relative z-10">
+                                {minutes.map((m) => (
+                                    <div 
+                                        key={m} 
+                                        className={`time-picker-item ${value.minute === m ? 'selected' : ''}`}
+                                        onClick={() => onChange({...value, minute: m})}
+                                    >
+                                        {m}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                         {/* AM/PM Column */}
+                        <div className="flex-1 time-picker-column relative">
+                            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-6 bg-blue-100/50 dark:bg-blue-900/30 rounded pointer-events-none z-0"></div>
+                            <div className="py-[28px] relative z-10">
+                                {ampms.map((ap) => (
+                                    <div 
+                                        key={ap} 
+                                        className={`time-picker-item ${value.ampm === ap ? 'selected text-blue-600 dark:text-blue-400' : ''}`}
+                                        onClick={() => onChange({...value, ampm: ap})}
+                                    >
+                                        {ap}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // --- Document Generation (DOCX) ---
         const generateDocx = async (project, waypoints, signatureData) => {
             // Font Setting: Tahoma
             const FONT_NAME = "Tahoma";
+            
+            const displayDate = formatDateDDMMYYYY(project.date);
+            const displayStartTime = convert12to24(project.startTime);
+            const displayEndTime = convert12to24(project.endTime);
 
-            // Helper to create a centered text paragraph
-            const createText = (text, bold = false, size = 20, underline = false, align = AlignmentType.CENTER, allCaps = false) => {
+            const createText = (text, bold = false, size = 20, underline = false, align = AlignmentType.CENTER, allCaps = false, color = "000000") => {
                 return new Paragraph({
                     alignment: align,
                     children: [new TextRun({ 
@@ -292,16 +447,17 @@
                         size: size, 
                         font: FONT_NAME, 
                         underline: underline ? { type: "single" } : undefined,
-                        allCaps: allCaps
+                        allCaps: allCaps,
+                        color: color // Ensure Black
                     })],
                 });
             };
 
-            const createCell = (text, bold = false, vMerge = false, type = "continue", rowHeight = false) => {
+            const createCell = (text, bold = false, vMerge = false, type = "continue", size = 20) => {
                 const cellProps = {
                     verticalAlign: VerticalAlign.CENTER,
                     margins: { top: 100, bottom: 100, left: 100, right: 100 },
-                    children: [createText(text, bold)],
+                    children: [createText(text, bold, size)],
                 };
                 if (vMerge) {
                     cellProps.verticalMerge = type; // "restart" or "continue"
@@ -309,7 +465,12 @@
                 return new TableCell(cellProps);
             };
 
-            // 1. General Check Table - FULL PAGE (approx 600-800 twips per row)
+            // 1. General Check Table - FULL PAGE (Increased Row Height)
+            // Using exactly 702.9478 twips per row as requested
+            const ROW_HEIGHT = 702.9478; 
+            // FONT SIZE 16 = 32 Half-points
+            const GENERAL_FONT_SIZE = 32;
+
             const generalCheckRows = [
                 ["1.", "Drone Model Name", "Surveyaan One"],
                 ["2.", "Drone Serial Number", "SV12803020"],
@@ -328,11 +489,11 @@
                 ["15.", "High rise building", "None in the fly zone"],
             ].map(row => 
                 new TableRow({
-                    height: { value: 700, rule: HeightRule.AT_LEAST }, // Increase row height to fill page
+                    height: { value: ROW_HEIGHT, rule: HeightRule.AT_LEAST }, 
                     children: [
-                        createCell(row[0]),
-                        createCell(row[1]),
-                        createCell(row[2]),
+                        createCell(row[0], false, false, "continue", GENERAL_FONT_SIZE),
+                        createCell(row[1], false, false, "continue", GENERAL_FONT_SIZE),
+                        createCell(row[2], false, false, "continue", GENERAL_FONT_SIZE),
                     ]
                 })
             );
@@ -370,18 +531,18 @@
 
             flightLogRows.push(new TableRow({
                 children: [
-                    createCell(project.date, true, true, "restart"),
+                    createCell(displayDate, true, true, "restart"),
                     createCell(project.pilot, true, true, "restart"),
                     createCell(firstFrom, true),
                     createCell(firstTo, true),
-                    createCell(`${project.startTime} HRS`, true, true, "restart"),
-                    createCell(`${project.endTime} HRS`, true, true, "restart"),
+                    createCell(`${displayStartTime} HRS`, true, true, "restart"),
+                    createCell(`${displayEndTime} HRS`, true, true, "restart"),
                 ]
             }));
 
             // Subsequent Rows
             for(let i = 1; i < wps.length; i++) {
-                const nextWP = wps[(i + 1) % wps.length]; // Closed loop logic or just segments
+                const nextWP = wps[(i + 1) % wps.length]; 
                 const fromTxt = `${formatDMS(wps[i].lat, true)}\n${formatDMS(wps[i].lon, false)}`;
                 const toTxt = `${formatDMS(nextWP.lat, true)}\n${formatDMS(nextWP.lon, false)}`;
 
@@ -436,10 +597,19 @@
                         },
                     },
                     children: [
-                        createText("DRONE SURVEY LOG SHEET", true, 32, true, AlignmentType.CENTER, true), // Heading 1
+                        // Page 1 Content
+                        createText("DRONE SURVEY LOG SHEET", true, 32, true, AlignmentType.CENTER, true, "000000"), // Heading 1 Black
                         createText(""), // Spacer
                         new Paragraph({
-                            children: [new TextRun({ text: "1. GENERAL CHECK", bold: true, font: FONT_NAME, size: 24, allCaps: true, underline: { type: "single" } })],
+                            children: [new TextRun({ 
+                                text: "1. GENERAL CHECK", 
+                                bold: true, 
+                                font: FONT_NAME, 
+                                size: 24, 
+                                allCaps: true, 
+                                underline: { type: "single" },
+                                color: "000000" // Black
+                            })],
                             spacing: { after: 200 }
                         }),
                         new Table({
@@ -447,21 +617,30 @@
                             rows: [
                                 new TableRow({
                                     children: [
-                                        new TableCell({ children: [createText("S. No.", true)], width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F2F2F2" } }),
-                                        new TableCell({ children: [createText("Check", true)], width: { size: 40, type: WidthType.PERCENTAGE }, shading: { fill: "F2F2F2" } }),
-                                        new TableCell({ children: [createText("Found/ Result/ Remark", true)], width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F2F2F2" } }),
+                                        new TableCell({ children: [createText("S. No.", true, GENERAL_FONT_SIZE)], width: { size: 10, type: WidthType.PERCENTAGE }, shading: { fill: "F2F2F2" } }),
+                                        new TableCell({ children: [createText("Check", true, GENERAL_FONT_SIZE)], width: { size: 40, type: WidthType.PERCENTAGE }, shading: { fill: "F2F2F2" } }),
+                                        new TableCell({ children: [createText("Found/ Result/ Remark", true, GENERAL_FONT_SIZE)], width: { size: 50, type: WidthType.PERCENTAGE }, shading: { fill: "F2F2F2" } }),
                                     ]
                                 }),
                                 ...generalCheckRows
                             ],
                         }),
+                        // Force Page Break after Table 1
                         new Paragraph({
                             text: "",
-                            pageBreakBefore: true, // FORCE PAGE BREAK
+                            pageBreakBefore: true, 
                         }),
+                        // Page 2 Content
                         new Paragraph({
-                            text: "2. Flight Log sheet",
-                            heading: HeadingLevel.HEADING_2,
+                            children: [new TextRun({ 
+                                text: "2. FLIGHT LOG SHEET", 
+                                bold: true, 
+                                font: FONT_NAME, 
+                                size: 24, 
+                                allCaps: true, 
+                                underline: { type: "single" },
+                                color: "000000" // Black
+                            })],
                             spacing: { after: 200 }
                         }),
                         new Table({
@@ -485,13 +664,22 @@
             const [signatureImg, setSignatureImg] = useState(null); // Base64
             const [defaultSignature, setDefaultSignature] = useState(null); // Local file fetch
             
-            const [project, setProject] = useState({ date: new Date().toISOString().split('T')[0], pilot: "Pretesh Ostwal", location: "Survey Zone", altitude: 80, startTime: "11:30", endTime: "11:46" });
+            const [project, setProject] = useState({ 
+                date: new Date().toISOString().split('T')[0], 
+                pilot: "Pretesh Ostwal", 
+                location: "Survey Zone", 
+                altitude: 80, 
+                // New Time State as Objects (12hr)
+                startTime: { hour: "11", minute: "30", ampm: "AM" },
+                endTime: { hour: "11", minute: "46", ampm: "AM" }
+            });
             const [specs, setSpecs] = useState({ cruiseSpeed: 8, maxFlightTime: 30 });
             const [mapType, setMapType] = useState('hybrid');
             const [searchQuery, setSearchQuery] = useState('');
             const [showStaticLayer, setShowStaticLayer] = useState(true);
             const [isSidebarOpen, setSidebarOpen] = useState(true);
             const [dragActive, setDragActive] = useState(false); // Drag state
+            const [isTimeExpanded, setIsTimeExpanded] = useState(true); // State for collapsing/expanding time picker
 
             const mapRef = useRef(null);
             const mapInstance = useRef(null);
@@ -520,17 +708,27 @@
                 const loader = document.getElementById('loading');
                 if(loader) { loader.style.opacity = '0'; setTimeout(() => loader.style.display = 'none', 500); }
                 
-                const saved = localStorage.getItem('360survey_pro_v23');
+                const saved = localStorage.getItem('360survey_pro_v36');
                 if (saved) {
                     const data = JSON.parse(saved);
                     if (data.waypoints) setWaypoints(data.waypoints);
-                    if (data.project) setProject(data.project);
+                    if (data.project) {
+                        // Migrate old time strings to objects if needed, or use saved
+                        // Simple check if it's object or string
+                        const p = data.project;
+                        if (typeof p.startTime === 'string') {
+                           // Reset to default object structure if old version
+                           p.startTime = { hour: "11", minute: "30", ampm: "AM" };
+                           p.endTime = { hour: "11", minute: "46", ampm: "AM" };
+                        }
+                        setProject(p);
+                    }
                     if (data.kmlFileName) setKmlFileName(data.kmlFileName);
                     if (data.signatureImg) setSignatureImg(data.signatureImg);
                 }
             }, []);
 
-            useEffect(() => { localStorage.setItem('360survey_pro_v23', JSON.stringify({ waypoints, project, kmlFileName, signatureImg })); }, [waypoints, project, kmlFileName, signatureImg]);
+            useEffect(() => { localStorage.setItem('360survey_pro_v36', JSON.stringify({ waypoints, project, kmlFileName, signatureImg })); }, [waypoints, project, kmlFileName, signatureImg]);
 
             useEffect(() => {
                 if (!mapRef.current || mapInstance.current) return;
@@ -664,11 +862,49 @@
                 reader.readAsDataURL(file);
             };
 
+            // FIXED: Corrected Clear Functionality
+            const handleClear = () => {
+                if (confirm("Are you sure you want to reset everything?")) {
+                    setWaypoints([]);
+                    setActivePolyline([]);
+                    setStaticKmlFeatures([]);
+                    setKmlFileName("");
+                    setProject({ 
+                        date: new Date().toISOString().split('T')[0], 
+                        pilot: "Pretesh Ostwal", 
+                        location: "Survey Zone", 
+                        altitude: 80, 
+                        startTime: { hour: "11", minute: "30", ampm: "AM" },
+                        endTime: { hour: "11", minute: "46", ampm: "AM" }
+                    });
+                    if(mapInstance.current) {
+                        mapInstance.current.closePopup();
+                        // Reset view to India default
+                        mapInstance.current.setView([20.5937, 78.9629], 5);
+                    }
+                }
+            };
+
             const exportDocx = async () => {
                 const sigToUse = signatureImg || defaultSignature;
                 const doc = await generateDocx(project, waypoints, sigToUse);
-                Packer.toBlob(doc).then((blob) => {
-                    saveAs(blob, `${kmlFileName || 'DRONE SURVEY LOG SHEET'}.docx`);
+                
+                // Pack the DOCX into a Blob
+                const docBlob = await Packer.toBlob(doc);
+                
+                // Create the required folder structure using JSZip
+                const zip = new JSZip();
+                const folder7 = zip.folder("7");
+                const folderLogSheet = folder7.folder("DRONE SURVEY LOG SHEET");
+                
+                // Name the docx exactly "DRONE SURVEY LOG SHEET.docx"
+                folderLogSheet.file("DRONE SURVEY LOG SHEET.docx", docBlob);
+                
+                // Generate the ZIP
+                zip.generateAsync({type:"blob"})
+                .then(function(content) {
+                    // Save ZIP with the KML filename (or default)
+                    saveAs(content, `${kmlFileName || 'DRONE SURVEY LOG SHEET'}.zip`);
                 });
             };
             
@@ -682,11 +918,6 @@
             };
 
             const stats = useMemo(() => calculateStats(waypoints, specs), [waypoints, specs]);
-
-            // Simple HTML Preview for UI (Docx logic handled separately)
-            const showPrintPreview = () => {
-                window.print();
-            };
 
             return (
                 <div className="flex h-screen w-full relative font-sans">
@@ -709,7 +940,8 @@
                     <div className={`absolute left-6 top-24 bottom-8 w-80 z-[1000] flex flex-col transition-all-smooth ${isSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-[120%] opacity-0'}`}>
                         <div className="glass-panel h-full flex flex-col overflow-hidden shadow-2xl">
                             <div className="p-6 border-b border-white/40">
-                                <h1 className="font-black text-xl flex items-center gap-3 mb-4 tracking-tight text-gray-800 dark:text-white">
+                                {/* Branding Change: 360°SURVEY in BLUE */}
+                                <h1 className="font-black text-xl flex items-center gap-3 mb-4 tracking-tight text-blue-600 dark:text-blue-400">
                                     <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg"><Icon name="crosshair" size={22} /></div>
                                     360°SURVEY
                                 </h1>
@@ -719,18 +951,29 @@
                                         <input type="date" value={project.date} onChange={e => setProject({...project, date: e.target.value})} className="flex-1 bg-white/60 dark:bg-black/20 rounded-xl px-3 py-2 text-sm border border-transparent focus:border-blue-500 focus:bg-white transition-all outline-none"/>
                                         <input type="number" placeholder="Alt (m)" value={project.altitude} onChange={e => setProject({...project, altitude: e.target.value})} className="w-20 bg-white/60 dark:bg-black/20 rounded-xl px-3 py-2 text-sm border border-transparent focus:border-blue-500 focus:bg-white transition-all outline-none"/>
                                     </div>
-                                    <div className="flex gap-2 w-full">
-                                        <input type="text" placeholder="Start" value={project.startTime} onChange={e => setProject({...project, startTime: e.target.value})} className="flex-1 min-w-0 bg-white/60 dark:bg-black/20 rounded-xl px-3 py-2 text-sm border border-transparent focus:border-blue-500 focus:bg-white transition-all outline-none"/>
-                                        <input type="text" placeholder="End" value={project.endTime} onChange={e => setProject({...project, endTime: e.target.value})} className="flex-1 min-w-0 bg-white/60 dark:bg-black/20 rounded-xl px-3 py-2 text-sm border border-transparent focus:border-blue-500 focus:bg-white transition-all outline-none"/>
+                                    
+                                    {/* MINIMIZABLE TIME PICKER SECTION */}
+                                    <div className="bg-white/40 dark:bg-black/10 rounded-xl p-1 border border-white/20">
+                                        <div className="flex items-center justify-between px-2 py-1 cursor-pointer select-none" onClick={() => setIsTimeExpanded(!isTimeExpanded)}>
+                                            <span className="text-xs font-bold text-gray-500">MISSION TIME</span>
+                                            <Icon name={isTimeExpanded ? "chevron-up" : "chevron-down"} size={14} className="text-gray-400"/>
+                                        </div>
+                                        <div className={`expandable-content ${isTimeExpanded ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                            <div className="flex gap-2 w-full p-1 items-end">
+                                                <TimePickerScroll label="Start" value={project.startTime} onChange={(val) => setProject({...project, startTime: val})} />
+                                                <TimePickerScroll label="End" value={project.endTime} onChange={(val) => setProject({...project, endTime: val})} />
+                                            </div>
+                                        </div>
                                     </div>
+
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-white/20 dark:bg-black/10">
                                 {waypoints.map((wp, i) => (
-                                    <div key={i} className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 p-3 rounded-xl border border-white/40 shadow-sm text-xs hover:scale-[1.02] transition-transform cursor-pointer group">
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">{i+1}</div>
-                                        <div className="flex-1 font-mono text-[10px] text-gray-600 dark:text-gray-300">{formatDMS(wp.lat, true)}<br/>{formatDMS(wp.lon, false)}</div>
-                                        <button onClick={() => setWaypoints(waypoints.filter((_, idx) => idx !== i))} className="p-2 bg-red-50 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="trash-2" size={14}/></button>
+                                    <div key={i} className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 p-2 rounded-xl border border-white/40 shadow-sm text-xs hover:scale-[1.02] transition-transform cursor-pointer group">
+                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-[10px]">{i+1}</div>
+                                        <div className="flex-1 font-mono text-[9px] text-gray-600 dark:text-gray-300 leading-tight">{formatDMS(wp.lat, true)}<br/>{formatDMS(wp.lon, false)}</div>
+                                        <button onClick={() => setWaypoints(waypoints.filter((_, idx) => idx !== i))} className="p-1 bg-red-50 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="trash-2" size={12}/></button>
                                     </div>
                                 ))}
                                 {waypoints.length === 0 && <div className="text-center text-gray-400 text-sm py-10 flex flex-col items-center gap-2"><Icon name="map-pin" size={32} className="opacity-30"/>Click map to add points</div>}
@@ -771,7 +1014,7 @@
                             <Tooltip text="Draw Path"><button onClick={() => setMode('draw_poly')} className={`p-4 rounded-xl transition-all ${mode === 'draw_poly' ? 'bg-fuchsia-600 text-white shadow-lg' : 'hover:bg-white/50 text-gray-600'}`}><Icon name="pen-tool" size={24}/></button></Tooltip>
                             {mode === 'draw_poly' && activePolyline.length > 0 && <button onClick={() => { setWaypoints(prev => [...prev, ...activePolyline]); setActivePolyline([]); setMode('navigate'); }} className="ml-1 bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl text-sm font-bold shadow-lg animate-pulse transition-all">Finish</button>}
                             <div className="w-px h-8 bg-gray-400/30"></div>
-                            <Tooltip text="Clear"><button onClick={() => confirm("Reset mission?") && setWaypoints([])} className="p-4 rounded-xl hover:bg-red-50 text-red-500 transition-colors"><Icon name="trash-2" size={24}/></button></Tooltip>
+                            <Tooltip text="Clear"><button onClick={handleClear} className="p-4 rounded-xl hover:bg-red-50 text-red-500 transition-colors"><Icon name="trash-2" size={24}/></button></Tooltip>
                         </div>
                     </div>
                     
